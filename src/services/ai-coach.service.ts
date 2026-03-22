@@ -22,6 +22,17 @@ type DraftSummary = {
   foods: string[];
 };
 
+type GeminiResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string;
+      }>;
+    };
+  }>;
+  modelVersion?: string;
+};
+
 const fallbackDashboardQuotes = [
   "Fuel the goal, not just the moment. 💪 One balanced choice today makes tomorrow easier.",
   "Progress is built meal by meal. 🌱 Keep showing up for your body.",
@@ -29,6 +40,45 @@ const fallbackDashboardQuotes = [
   "Small consistent wins beat extreme plans. 🚀 Eat smart, stay steady.",
   "A strong routine starts with one intentional plate. 🍽️ Keep the momentum going.",
 ];
+
+async function callGemini(prompt: string) {
+  const url = new URL(
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+  );
+
+  url.searchParams.set("key", env.geminiApiKey!);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            {
+              text: prompt,
+            },
+          ],
+        },
+      ],
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Gemini request failed", {
+      status: response.status,
+      statusText: response.statusText,
+      body: errorText.slice(0, 500),
+    });
+    return null;
+  }
+
+  return (await response.json()) as GeminiResponse;
+}
 
 function buildSystemPrompt(mode: AiCoachMode) {
   if (mode === "search") {
@@ -313,20 +363,7 @@ export async function estimateNutritionWithAi(input: NutritionEstimateInput) {
     return fallbackNutritionEstimate(input);
   }
 
-  const response = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": env.geminiApiKey!,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: `You are a nutrition estimation engine inside a calorie tracking app.
+  const data = await callGemini(`You are a nutrition estimation engine inside a calorie tracking app.
 Return valid JSON only with this exact shape:
 {"calories":123,"protein":4.5,"fiber":2.1,"sugar":12.3}
 
@@ -341,29 +378,11 @@ Rules:
 - correct obvious common spelling mistakes when possible, like "bananna" -> "banana"
 - be practical and realistic for common real-world foods
 - do not add markdown
-- do not add extra keys`,
-              },
-            ],
-          },
-        ],
-      }),
-      cache: "no-store",
-    },
-  );
+- do not add extra keys`);
 
-  if (!response.ok) {
+  if (!data) {
     return fallbackNutritionEstimate(input);
   }
-
-  const data = (await response.json()) as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{
-          text?: string;
-        }>;
-      };
-    }>;
-  };
 
   const reply = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
   return parseNutritionEstimate(reply, input);
@@ -386,20 +405,7 @@ export async function getAiFoodRecommendation(
         ? "User health guidance request"
         : "User draft meal analysis request";
 
-  const response = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": env.geminiApiKey!,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: `${systemPrompt}
+  const data = await callGemini(`${systemPrompt}
 
 ${userIntentLabel}: ${prompt}
 
@@ -413,30 +419,11 @@ Current meal draft:
 - Hunger before: ${draft.hungerBefore}/10
 - Fullness after target: ${draft.fullnessAfter}/10
 - Mood: ${draft.mood}
-- Stress: ${draft.stressLevel}/10`,
-              },
-            ],
-          },
-        ],
-      }),
-      cache: "no-store",
-    },
-  );
+- Stress: ${draft.stressLevel}/10`);
 
-  if (!response.ok) {
+  if (!data) {
     return buildFallbackCoachResponse(mode, draft);
   }
-
-  const data = (await response.json()) as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{
-          text?: string;
-        }>;
-      };
-    }>;
-    modelVersion?: string;
-  };
 
   const reply = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
@@ -452,9 +439,7 @@ Current meal draft:
   }
 
   return {
-    reply:
-      reply ??
-      buildFallbackCoachResponse(mode, draft).reply,
+    reply: reply ?? buildFallbackCoachResponse(mode, draft).reply,
     provider: data.modelVersion ?? "gemini",
   };
 }
@@ -467,20 +452,7 @@ export async function getDashboardQuote() {
     return { quote: fallback, provider: "fallback" };
   }
 
-  const response = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": env.geminiApiKey!,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: `You are writing a short motivational dashboard quote for a calorie tracking app.
+  const data = await callGemini(`You are writing a short motivational dashboard quote for a calorie tracking app.
 Return one fresh quote only.
 Rules:
 - 1 sentence only
@@ -488,30 +460,11 @@ Rules:
 - positive, modern, and motivating
 - include 1 or 2 emojis
 - avoid hashtags
-- do not use quotation marks`,
-              },
-            ],
-          },
-        ],
-      }),
-      cache: "no-store",
-    },
-  );
+- do not use quotation marks`);
 
-  if (!response.ok) {
+  if (!data) {
     return { quote: fallback, provider: "fallback" };
   }
-
-  const data = (await response.json()) as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{
-          text?: string;
-        }>;
-      };
-    }>;
-    modelVersion?: string;
-  };
 
   const quote = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
   return {

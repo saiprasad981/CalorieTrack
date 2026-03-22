@@ -1,12 +1,16 @@
+function cleanEnv(value: string | undefined) {
+  return value?.trim();
+}
+
 export const env = {
-  mongoUri: process.env.MONGODB_URI,
-  googleClientId: process.env.GOOGLE_CLIENT_ID,
-  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  authSecret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
-  nextAuthUrl: process.env.NEXTAUTH_URL,
-  usdaApiKey: process.env.USDA_API_KEY,
-  jwtSecret: process.env.JWT_SECRET,
-  geminiApiKey: process.env.GEMINI_API_KEY,
+  mongoUri: cleanEnv(process.env.MONGODB_URI),
+  googleClientId: cleanEnv(process.env.GOOGLE_CLIENT_ID),
+  googleClientSecret: cleanEnv(process.env.GOOGLE_CLIENT_SECRET),
+  authSecret: cleanEnv(process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET),
+  nextAuthUrl: cleanEnv(process.env.NEXTAUTH_URL),
+  usdaApiKey: cleanEnv(process.env.USDA_API_KEY),
+  jwtSecret: cleanEnv(process.env.JWT_SECRET),
+  geminiApiKey: cleanEnv(process.env.GEMINI_API_KEY),
 };
 
 export const isMongoConfigured = Boolean(env.mongoUri);
