@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import { AppProviders } from "@/components/providers/app-providers";
+import { isGoogleAuthConfigured, isMongoConfigured } from "@/config/env";
 import { siteConfig } from "@/config/site";
 
 import "./globals.css";
@@ -75,10 +76,12 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const authEnabled = isGoogleAuthConfigured || isMongoConfigured;
+
   return (
     <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>
-        <AppProviders>{children}</AppProviders>
+        <AppProviders authEnabled={authEnabled}>{children}</AppProviders>
       </body>
     </html>
   );

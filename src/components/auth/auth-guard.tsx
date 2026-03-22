@@ -4,9 +4,20 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
+import { useAuthAvailability } from "@/components/providers/auth-availability";
 import { useHasLocalSession } from "@/hooks/use-has-local-session";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
+  const authEnabled = useAuthAvailability();
+
+  if (!authEnabled) {
+    return <AuthGuardLocalOnly>{children}</AuthGuardLocalOnly>;
+  }
+
+  return <AuthGuardWithSession>{children}</AuthGuardWithSession>;
+}
+
+function AuthGuardWithSession({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { status } = useSession();
@@ -37,6 +48,25 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (status !== "authenticated" && !hasLocalSession) {
+    return null;
+  }
+
+  return <>{children}</>;
+}
+
+function AuthGuardLocalOnly({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const hasLocalSession = useHasLocalSession();
+
+  useEffect(() => {
+    if (!hasLocalSession) {
+      document.cookie = "calorietrack-auth=; path=/; max-age=0; samesite=lax";
+      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+    }
+  }, [hasLocalSession, pathname, router]);
+
+  if (!hasLocalSession) {
     return null;
   }
 

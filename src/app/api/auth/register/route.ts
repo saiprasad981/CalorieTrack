@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { isMongoConfigured } from "@/config/env";
 import { connectToDatabase } from "@/lib/mongoose";
 import { hashPassword } from "@/lib/password";
 import { demoUser } from "@/lib/mock-data";
@@ -49,6 +50,16 @@ function buildProfileDefaults(input: z.infer<typeof registerSchema>) {
 
 export async function POST(request: Request) {
   const body = registerSchema.parse(await request.json());
+
+  if (!isMongoConfigured) {
+    return NextResponse.json(
+      {
+        message:
+          "Local signup is not configured yet. Add a real MONGODB_URI in .env.local to create accounts here.",
+      },
+      { status: 503 },
+    );
+  }
 
   await connectToDatabase();
 

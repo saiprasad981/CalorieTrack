@@ -1,4 +1,4 @@
-import { env, isGeminiConfigured } from "@/config/env";
+import { env, isHuggingFaceConfigured } from "@/config/env";
 
 export type AiCoachMode = "search" | "guidance" | "draft-analysis";
 
@@ -22,15 +22,14 @@ type DraftSummary = {
   foods: string[];
 };
 
-type GeminiResponse = {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{
-        text?: string;
-      }>;
+type HuggingFaceResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string;
+      reasoning?: string;
     };
   }>;
-  modelVersion?: string;
+  model?: string;
 };
 
 const fallbackDashboardQuotes = [
@@ -41,35 +40,30 @@ const fallbackDashboardQuotes = [
   "A strong routine starts with one intentional plate. 🍽️ Keep the momentum going.",
 ];
 
-async function callGemini(prompt: string) {
-  const url = new URL(
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-  );
-
-  url.searchParams.set("key", env.geminiApiKey!);
-
-  const response = await fetch(url, {
+async function callHuggingFace(prompt: string) {
+  const response = await fetch("https://router.huggingface.co/v1/chat/completions", {
     method: "POST",
     headers: {
+      Authorization: `Bearer ${env.huggingFaceApiKey!}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      contents: [
+      model: env.huggingFaceModel ?? "meta-llama/Llama-3.1-8B-Instruct",
+      messages: [
         {
-          parts: [
-            {
-              text: prompt,
-            },
-          ],
+          role: "user",
+          content: prompt,
         },
       ],
+      max_tokens: 260,
+      stream: false,
     }),
     cache: "no-store",
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("Gemini request failed", {
+    console.error("Hugging Face request failed", {
       status: response.status,
       statusText: response.statusText,
       body: errorText.slice(0, 500),
@@ -77,7 +71,25 @@ async function callGemini(prompt: string) {
     return null;
   }
 
-  return (await response.json()) as GeminiResponse;
+  return (await response.json()) as HuggingFaceResponse;
+}
+
+async function callTextModel(prompt: string) {
+  if (!isHuggingFaceConfigured) {
+    return null;
+  }
+
+  const huggingFaceData = await callHuggingFace(prompt);
+  const huggingFaceText = huggingFaceData?.choices?.[0]?.message?.content?.trim();
+
+  if (!huggingFaceData || !huggingFaceText) {
+    return null;
+  }
+
+  return {
+    text: huggingFaceText,
+    provider: huggingFaceData.model ?? "huggingface",
+  };
 }
 
 function buildSystemPrompt(mode: AiCoachMode) {
@@ -359,11 +371,11 @@ function parseNutritionEstimate(text: string, input: NutritionEstimateInput) {
 }
 
 export async function estimateNutritionWithAi(input: NutritionEstimateInput) {
-  if (!isGeminiConfigured) {
+  if (!isHuggingFaceConfigured) {
     return fallbackNutritionEstimate(input);
   }
 
-  const data = await callGemini(`You are a nutrition estimation engine inside a calorie tracking app.
+  const result = await callTextModel(`You are a nutrition estimation engine inside a calorie tracking app.
 Return valid JSON only with this exact shape:
 {"calories":123,"protein":4.5,"fiber":2.1,"sugar":12.3}
 
@@ -380,12 +392,11 @@ Rules:
 - do not add markdown
 - do not add extra keys`);
 
-  if (!data) {
+  if (!result) {
     return fallbackNutritionEstimate(input);
   }
 
-  const reply = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
-  return parseNutritionEstimate(reply, input);
+  return parseNutritionEstimate(result.text, input);
 }
 
 export async function getAiFoodRecommendation(
@@ -393,7 +404,7 @@ export async function getAiFoodRecommendation(
   draft: DraftSummary,
   mode: AiCoachMode,
 ) {
-  if (!isGeminiConfigured) {
+  if (!isHuggingFaceConfigured) {
     return buildFallbackCoachResponse(mode, draft);
   }
 
@@ -405,7 +416,7 @@ export async function getAiFoodRecommendation(
         ? "User health guidance request"
         : "User draft meal analysis request";
 
-  const data = await callGemini(`${systemPrompt}
+  const result = await callTextModel(`${systemPrompt}
 
 ${userIntentLabel}: ${prompt}
 
@@ -421,11 +432,11 @@ Current meal draft:
 - Mood: ${draft.mood}
 - Stress: ${draft.stressLevel}/10`);
 
-  if (!data) {
+  if (!result) {
     return buildFallbackCoachResponse(mode, draft);
   }
 
-  const reply = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  const reply = result.text;
 
   if (mode === "draft-analysis") {
     const parsed = parseDraftAnalysis(reply ?? "");
@@ -434,13 +445,13 @@ Current meal draft:
       reply: parsed.effect,
       effect: parsed.effect,
       recommendation: parsed.recommendation,
-      provider: data.modelVersion ?? "gemini",
+      provider: result.provider,
     };
   }
 
   return {
     reply: reply ?? buildFallbackCoachResponse(mode, draft).reply,
-    provider: data.modelVersion ?? "gemini",
+    provider: result.provider,
   };
 }
 
@@ -448,11 +459,11 @@ export async function getDashboardQuote() {
   const fallback =
     fallbackDashboardQuotes[Math.floor(Date.now() / 1000) % fallbackDashboardQuotes.length];
 
-  if (!isGeminiConfigured) {
+  if (!isHuggingFaceConfigured) {
     return { quote: fallback, provider: "fallback" };
   }
 
-  const data = await callGemini(`You are writing a short motivational dashboard quote for a calorie tracking app.
+  const result = await callTextModel(`You are writing a short motivational dashboard quote for a calorie tracking app.
 Return one fresh quote only.
 Rules:
 - 1 sentence only
@@ -462,13 +473,12 @@ Rules:
 - avoid hashtags
 - do not use quotation marks`);
 
-  if (!data) {
+  if (!result) {
     return { quote: fallback, provider: "fallback" };
   }
 
-  const quote = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
   return {
-    quote: quote || fallback,
-    provider: data.modelVersion ?? "gemini",
+    quote: result.text || fallback,
+    provider: result.provider,
   };
 }

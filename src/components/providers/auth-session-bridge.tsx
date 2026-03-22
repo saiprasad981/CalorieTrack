@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useSession } from "next-auth/react";
 
+import { useAuthAvailability } from "@/components/providers/auth-availability";
 import {
   replaceStoredBootstrapData,
   saveStoredSession,
@@ -21,6 +22,16 @@ type BootstrapPayload = {
 };
 
 export function AuthSessionBridge() {
+  const authEnabled = useAuthAvailability();
+
+  if (!authEnabled) {
+    return null;
+  }
+
+  return <AuthSessionBridgeWithSession />;
+}
+
+function AuthSessionBridgeWithSession() {
   const { data: session, status } = useSession();
 
   useEffect(() => {

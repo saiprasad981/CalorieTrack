@@ -29,6 +29,10 @@ CalorieTrack is a responsive Next.js calorie and nutrition behavior app that com
 Copy `.env.example` to `.env.local` and fill in:
 
 ```bash
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=
+PORT=5000
+CLIENT_URL=http://localhost:3000
 MONGODB_URI=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
@@ -36,7 +40,8 @@ AUTH_SECRET=
 NEXTAUTH_URL=http://localhost:3000
 USDA_API_KEY=
 JWT_SECRET=
-GEMINI_API_KEY=
+HUGGINGFACE_API_KEY=
+HUGGINGFACE_MODEL=meta-llama/Llama-3.1-8B-Instruct
 ```
 
 ## Run locally
@@ -61,3 +66,4 @@ Then open `http://localhost:3000`.
 3. Add rate limiting and ownership checks to write routes.
 4. Add test coverage for calculations, validators, and insight rules.
 5. Polish optimistic mutations and loading skeletons on data-entry pages.
+

@@ -5,9 +5,15 @@ import { SessionProvider } from "next-auth/react";
 import { ThemeProvider } from "next-themes";
 import { useState } from "react";
 
+import { AuthAvailabilityProvider } from "@/components/providers/auth-availability";
 import { AuthSessionBridge } from "@/components/providers/auth-session-bridge";
 
-export function AppProviders({ children }: { children: React.ReactNode }) {
+type AppProvidersProps = {
+  children: React.ReactNode;
+  authEnabled: boolean;
+};
+
+export function AppProviders({ children, authEnabled }: AppProvidersProps) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -22,12 +28,18 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-      <SessionProvider>
-        <QueryClientProvider client={queryClient}>
-          <AuthSessionBridge />
-          {children}
-        </QueryClientProvider>
-      </SessionProvider>
+      <AuthAvailabilityProvider authEnabled={authEnabled}>
+        {authEnabled ? (
+          <SessionProvider>
+            <QueryClientProvider client={queryClient}>
+              <AuthSessionBridge />
+              {children}
+            </QueryClientProvider>
+          </SessionProvider>
+        ) : (
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        )}
+      </AuthAvailabilityProvider>
     </ThemeProvider>
   );
 }

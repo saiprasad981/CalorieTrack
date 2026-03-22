@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 
-import { isGoogleAuthConfigured } from "@/config/env";
+import { env, isGoogleAuthConfigured, isMongoConfigured } from "@/config/env";
 import { connectToDatabase } from "@/lib/mongoose";
 import { demoUser } from "@/lib/mock-data";
 import { verifyPassword } from "@/lib/password";
@@ -19,6 +19,10 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials.password) {
+          return null;
+        }
+
+        if (!isMongoConfigured) {
           return null;
         }
 
@@ -42,8 +46,8 @@ export const authOptions: NextAuthOptions = {
     ...(isGoogleAuthConfigured
       ? [
           GoogleProvider({
-            clientId: process.env.GOOGLE_CLIENT_ID!,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+            clientId: env.googleClientId!,
+            clientSecret: env.googleClientSecret!,
           }),
         ]
       : []),
@@ -51,10 +55,10 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
   },
-  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+  secret: env.authSecret,
   callbacks: {
     async signIn({ user, account, profile }) {
-      if (account?.provider !== "google" || !user.email) {
+      if (account?.provider !== "google" || !user.email || !isMongoConfigured) {
         return true;
       }
 
@@ -92,7 +96,7 @@ export const authOptions: NextAuthOptions = {
         token.provider = account.provider;
       }
 
-      if (token.email) {
+      if (token.email && isMongoConfigured) {
         await connectToDatabase();
         const existing = await UserModel.findOne({ email: String(token.email).toLowerCase() })
           .select("_id")
@@ -121,6 +125,16 @@ export async function getCurrentUser() {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return null;
+  }
+
+  if (!isMongoConfigured) {
+    return {
+      ...demoUser,
+      id: session.user.id ?? demoUser.id,
+      name: session.user.name ?? demoUser.name,
+      email: session.user.email ?? demoUser.email,
+      image: session.user.image ?? "",
+    };
   }
 
   await connectToDatabase();
